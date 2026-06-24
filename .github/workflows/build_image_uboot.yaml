@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Optional release tag (must start with b)"
+        description: "Optional release tag (e.g. b2026.06.24.1; must start with b and use only [0-9A-Za-z._-])"
         required: false
         type: string
 
@@ -19,6 +19,7 @@ jobs:
   prepare-release-tag:
     runs-on: ubuntu-latest
     name: Prepare Release Tag
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.actor != 'github-actions[bot]') }}
     permissions:
       contents: write
     outputs:
