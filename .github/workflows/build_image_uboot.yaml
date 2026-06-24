@@ -8,13 +8,76 @@ on:
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional release tag (must start with b)"
+        required: false
+        type: string
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
+  prepare-release-tag:
+    runs-on: ubuntu-latest
+    name: Prepare Release Tag
+    permissions:
+      contents: write
+    outputs:
+      release_tag: ${{ steps.resolve_tag.outputs.release_tag }}
+    steps:
+      - name: Checkout Repository
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Resolve/Create release tag
+        id: resolve_tag
+        env:
+          INPUT_RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "push" ]; then
+            release_tag="${GITHUB_REF_NAME}"
+            echo "Using pushed tag: ${release_tag}"
+            echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -n "${INPUT_RELEASE_TAG}" ]; then
+            release_tag="${INPUT_RELEASE_TAG}"
+          else
+            release_tag="b$(date -u +'%Y.%m.%d').${GITHUB_RUN_NUMBER}"
+          fi
+
+          if [[ ! "${release_tag}" =~ ^b[0-9A-Za-z._-]+$ ]]; then
+            echo "::error::release tag must start with 'b' and contain only [0-9A-Za-z._-]"
+            exit 1
+          fi
+
+          remote_sha="$(git ls-remote --tags origin "refs/tags/${release_tag}" | awk '{print $1}')"
+          if [ -n "${remote_sha}" ]; then
+            if [ "${remote_sha}" != "${GITHUB_SHA}" ]; then
+              echo "::error::Tag ${release_tag} already exists on ${remote_sha}, expected ${GITHUB_SHA}."
+              exit 1
+            fi
+            echo "Tag ${release_tag} already exists on current commit, reusing it."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "${release_tag}" -m "Release ${release_tag}"
+            git push origin "refs/tags/${release_tag}"
+            echo "Created and pushed tag: ${release_tag}"
+          fi
+
+          echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
+
   build:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
     name: Build Images
+    needs: prepare-release-tag
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.actor != 'github-actions[bot]') }}
     permissions:
       contents: write
 
@@ -194,9 +257,11 @@ jobs:
         continue-on-error: true
 
       - name: Upload to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: ${{ needs.prepare-release-tag.outputs.release_tag != '' }}
         uses: ncipollo/release-action@v1
         with:
+            tag: ${{ needs.prepare-release-tag.outputs.release_tag }}
+            name: ${{ needs.prepare-release-tag.outputs.release_tag }}
             artifacts: "*-archlinux-*.img.xz"
             makeLatest: false
             allowUpdates: true
