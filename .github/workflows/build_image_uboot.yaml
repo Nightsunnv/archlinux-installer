@@ -51,8 +51,8 @@ jobs:
             release_tag="b$(date -u +'%Y.%m.%d').${GITHUB_RUN_ID}"
           fi
 
-          if [[ ! "${release_tag}" =~ ^b[0-9A-Za-z._-]+$ ]]; then
-            echo "::error::release tag must start with 'b' and contain only [0-9A-Za-z._-]"
+          if [[ ! "${release_tag}" =~ ^b[0-9A-Za-z]+([._-][0-9A-Za-z]+)*$ ]]; then
+            echo "::error::release tag must start with 'b' and use only [0-9A-Za-z._-] separators between alphanumeric groups"
             exit 1
           fi
 
@@ -258,7 +258,6 @@ jobs:
         continue-on-error: true
 
       - name: Upload to GitHub Release
-        if: ${{ needs.prepare-release-tag.outputs.release_tag != '' }}
         uses: ncipollo/release-action@v1
         with:
             tag: ${{ needs.prepare-release-tag.outputs.release_tag }}
