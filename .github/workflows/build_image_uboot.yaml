@@ -48,7 +48,7 @@ jobs:
           if [ -n "${INPUT_RELEASE_TAG}" ]; then
             release_tag="${INPUT_RELEASE_TAG}"
           else
-            release_tag="b$(date -u +'%Y.%m.%d').${GITHUB_RUN_NUMBER}"
+            release_tag="b$(date -u +'%Y.%m.%d').${GITHUB_RUN_ID}"
           fi
 
           if [[ ! "${release_tag}" =~ ^b[0-9A-Za-z._-]+$ ]]; then
